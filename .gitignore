@@ -1,0 +1,5 @@
+# Ignore FTP configuration for Sublime
+ftpsync.settings
+
+# Draft folder is ignored
+.draft
