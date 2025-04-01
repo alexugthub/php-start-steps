@@ -67,11 +67,14 @@ switch ($type):
         // Read this same file
         $code = file_get_contents(__FILE__);
 
+        // Convert special characters to HTML entities
+        $text = htmlspecialchars($request["text"], ENT_QUOTES);
+
         // Replace content of main element in this file
         $indent = "    ";
         $pattern = '/\s+<main>\n?([\s\S]*?)<\/main>/i';
         $replace = "\r\n$indent<main>";
-        $replace .= $request["text"];
+        $replace .= $text;
         $replace .= "$indent</main>";
         preg_match($pattern, $code, $matches, PREG_OFFSET_CAPTURE);
         $code = preg_replace($pattern, $replace, $code);
