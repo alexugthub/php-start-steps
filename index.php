@@ -67,16 +67,17 @@ switch ($type):
         // Read this same file
         $code = file_get_contents(__FILE__);
 
+        // Get node name to be replaced
+        $node = strtolower($request["node"]);
+
         // Convert special characters to HTML entities
         $text = htmlspecialchars($request["text"], ENT_QUOTES);
 
         // Replace content of main element in this file
         $indent = "    ";
-        $pattern = '/\s+<main>\n?([\s\S]*?)<\/main>/i';
-        $replace = "\r\n$indent<main>";
-        $replace .= $text;
-        $replace .= "$indent</main>";
-        preg_match($pattern, $code, $matches, PREG_OFFSET_CAPTURE);
+        $pattern = '/\s+(<' . $node . '[\s\S]*?>)\n?([\s\S]*?)' .
+          '(<\/' . $node . '>)/i';
+        $replace = PHP_EOL . $indent . '$1' . $text . $indent . '$3';
         $code = preg_replace($pattern, $replace, $code);
 
         // To test debug mode, save somewhere else
@@ -207,6 +208,9 @@ switch ($type):
        * Entry point
        */
       window.addEventListener("load", () => {
+        // Get all editable elements
+        const editables = document.querySelectorAll(".editable");
+
         // Timer for long press events
         let touchTimer;
         // A variable for temporarily storing text
@@ -214,74 +218,77 @@ switch ($type):
         // A flag indicating the Escape key has been pressed
         let esc = false;
 
-        // Enable content editing on long press
-        esel("main").addEventListener(
-          "mousedown",
-          (e) => {
-            touchTimer = setTimeout(() => {
-              if (e.target.contentEditable == "true") return;
+        editables.forEach((editable) => {
+          // Enable content editing on long press
+          editable.addEventListener(
+            "mousedown",
+            (e) => {
+              touchTimer = setTimeout(() => {
+                if (e.target.contentEditable == "true") return;
 
-              // Make the content editable and store it temporarily
-              e.target.contentEditable = true;
-              stagedText = e.target.innerText
+                // Make the content editable and store it temporarily
+                e.target.contentEditable = true;
+                stagedText = e.target.innerText
 
-              // Focus on text
-              e.target.focus();
+                // Focus on text
+                e.target.focus();
 
-              esc = false;
-            }, 500);
-          }
-        );
+                esc = false;
+              }, 500);
+            }
+          );
 
-        // Disable content editing and discard changes on escape key
-        esel("main").addEventListener(
-          "keyup",
-          (e) => {
-            if (e.keyCode == 27) {
-              esc = true;
+          // Disable content editing and discard changes on escape key
+          editable.addEventListener(
+            "keyup",
+            (e) => {
+              if (e.keyCode == 27) {
+                esc = true;
 
+                e.target.contentEditable = false;
+                // Restore initial text
+                e.target.innerText = stagedText;
+
+                stagedText = "";
+              }
+            }
+          );
+
+          // Disable content editing on loosing focus
+          editable.addEventListener(
+            "blur",
+            (e) => {
               e.target.contentEditable = false;
-              // Restore initial text
-              e.target.innerText = stagedText;
+
+              // Update text if something has changed
+              if (!esc && (e.target.innerText.trim() != stagedText)) {
+                // Send request to the server
+                post(
+                  "note",
+                  {
+                    "text": e.target.innerText,
+                    "node": e.target.nodeName
+                  },
+                  (result) => {
+                    if (!result.success) alert("Failed to save text");
+                  }
+                );
+              }
 
               stagedText = "";
             }
-          }
-        );
-
-        // Disable content editing on loosing focus
-        esel("main").addEventListener(
-          "blur",
-          (e) => {
-            e.target.contentEditable = false;
-
-            // Update text if something has changed
-            if (!esc && (e.target.innerText.trim() != stagedText)) {
-              // Send request to the server
-              post(
-                "note",
-                {
-                  "text": e.target.innerText
-                },
-                (result) => {
-                  if (!result.success) alert("Failed to save text");
-                }
-              );
-            }
-
-            stagedText = "";
-          }
-        );
+          );
+        });
       });
 
     </script>
   </head>
   <body>
     <header>
-      <h1><?= $title ?></h1>
-      <p><?= $description ?></p>
+      <h1 class="editable"><?= $title ?></h1>
+      <p class="editable"><?= $description ?></p>
     </header>
-    <main>Long press to edit this note. Press outside text to save it.
+    <main class="editable">Long press to edit this note. Press outside text to save it.
 Press the Escape key to cancel the changes.</main>
     <footer>
     </footer>
