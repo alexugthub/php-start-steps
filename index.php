@@ -12,7 +12,7 @@
 //====================================================================
 
 // Application version
-define("VERSION", "1.0.0");
+define("VERSION", "0.0.1");
 
 // Debug mode for local testing
 define("DEBUG",   true);
@@ -215,6 +215,8 @@ switch ($type):
         let touchTimer;
         // A variable for temporarily storing text
         let stagedText;
+        // A flag indicating the mouse down event is taking place
+        let mdown = false;
         // A flag indicating the Escape key has been pressed
         let esc = false;
 
@@ -226,6 +228,16 @@ switch ($type):
               touchTimer = setTimeout(() => {
                 if (e.target.contentEditable == "true") return;
 
+                mdown = true;
+              }, 500);
+            }
+          );
+
+          // Enable content editing on mouse release after long press
+          editable.addEventListener(
+            "mouseup",
+            (e) => {
+              if (mdown) {
                 // Make the content editable and store it temporarily
                 e.target.contentEditable = true;
                 stagedText = e.target.innerText
@@ -234,8 +246,15 @@ switch ($type):
                 e.target.focus();
 
                 esc = false;
-              }, 500);
+                mdown = false;
+              }
             }
+          );
+
+          // Don't enable content editing if selecting text
+          editable.addEventListener(
+            "mousemove",
+            (e) => { mdown = false }
           );
 
           // Disable content editing and discard changes on escape key
