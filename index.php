@@ -117,6 +117,7 @@ switch ($type):
         --background-color: rgba(32, 32, 32, 1);
         --surface-color: rgba(242, 242, 242, 1);
         --accent-color: rgba(0, 0, 0, 1);
+        --link-color: rgba(22, 182, 214, 1);
         --text-width: 70ch;
       }
 
@@ -160,6 +161,17 @@ switch ($type):
         text-align: justify;
         white-space: pre;
       }
+
+      a,
+      a:active,
+      a:visited {
+        color: var(--link-color);
+        text-decoration: none;
+      }
+
+      a:hover {
+        font-weight: bold;
+      }
     </style>
     <script>
       //==============================================================
@@ -200,6 +212,32 @@ switch ($type):
         )();
       }
 
+      /**
+       * Converts all links in a plain text to anchors
+       * 
+       * @param dom Plain content container
+       */
+      const linkify = (dom) => {
+        // Don't try to understand it, just accept that it works
+        const regex = new RegExp(
+          `(?:https?:)?:?//` +
+          `(?:[a-zA-Z0-9-]+\\.)+` +
+          `[a-zA-Z]{2,}` +
+          `(?:/[^\\s]*)?`,
+          'g'
+        );
+
+        // Replace plain links with anchors
+        dom.innerHTML = dom.innerHTML.replace(
+          regex,
+          m => {
+            // If the match starts with ://, prepend https
+            const href = m.startsWith('://') ? `https${m}` : m;
+            return `<a href="${href}" target="_blank">${m}</a>`;
+          }
+        );
+      }
+
       //==============================================================
       // ACTIONS
       //==============================================================
@@ -213,14 +251,17 @@ switch ($type):
 
         // Timer for long press events
         let touchTimer;
-        // A variable for temporarily storing text
-        let stagedText;
+        // A variable for temporarily storing texts
+        let stagedTexts = [];
         // A flag indicating the mouse down event is taking place
         let mdown = false;
         // A flag indicating the Escape key has been pressed
         let esc = false;
 
-        editables.forEach((editable) => {
+        editables.forEach((editable, idx) => {
+          // Store initial plain texts
+          stagedTexts[idx] = editable.innerText;
+
           // Enable content editing on long press
           editable.addEventListener(
             "mousedown",
@@ -238,23 +279,27 @@ switch ($type):
             "mouseup",
             (e) => {
               if (mdown) {
-                // Make the content editable and store it temporarily
+                // Make the content editable and in plain format
                 e.target.contentEditable = true;
-                stagedText = e.target.innerText
+                e.target.innerText = stagedTexts[idx];
 
                 // Focus on text
                 e.target.focus();
 
+                // Reset flags
                 esc = false;
                 mdown = false;
               }
             }
           );
 
-          // Don't enable content editing if selecting text
+          // Discard content editing if selecting text
           editable.addEventListener(
             "mousemove",
-            (e) => { mdown = false }
+            (e) => {
+              clearInterval(touchTimer);
+              mdown = false;
+            }
           );
 
           // Disable content editing and discard changes on escape key
@@ -266,9 +311,9 @@ switch ($type):
 
                 e.target.contentEditable = false;
                 // Restore initial text
-                e.target.innerText = stagedText;
-
-                stagedText = "";
+                e.target.innerText = stagedTexts[idx];
+                // Highlight links
+                linkify(e.target);
               }
             }
           );
@@ -280,12 +325,15 @@ switch ($type):
               e.target.contentEditable = false;
 
               // Update text if something has changed
-              if (!esc && (e.target.innerText.trim() != stagedText)) {
+              if (!esc && (e.target.innerText != stagedTexts[idx])) {
+                // Update staged text with changes
+                stagedTexts[idx] = e.target.innerText;
+
                 // Send request to the server
                 post(
                   "note",
                   {
-                    "text": e.target.innerText,
+                    "text": stagedTexts[idx],
                     "node": e.target.nodeName
                   },
                   (result) => {
@@ -294,10 +342,15 @@ switch ($type):
                 );
               }
 
-              stagedText = "";
+              // Highlight links
+              linkify(e.target);
             }
           );
+
+          // Highlight links
+          linkify(editable);
         });
+
       });
 
     </script>
@@ -308,7 +361,9 @@ switch ($type):
       <p class="editable"><?= $description ?></p>
     </header>
     <main class="editable">Long press to edit this note. Press outside text to save it.
-Press the Escape key to cancel the changes.</main>
+Press the Escape key to cancel the changes.
+
+Links like https://alexu.click open in a new tab</main>
     <footer>
     </footer>
     <dialog>
