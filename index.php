@@ -12,7 +12,7 @@
 //====================================================================
 
 // Application version
-define("VERSION", "0.0.1");
+define("VERSION", "0.1.0");
 
 // Debug mode for local testing
 define("DEBUG",   true);
@@ -215,9 +215,10 @@ switch ($type):
       /**
        * Converts all links in a plain text to anchors
        * 
-       * @param dom Plain content container
+       * @param dom  Plain content container
+       * @param text Plain text
        */
-      const linkify = (dom) => {
+      const linkify = (dom, text) => {
         // Don't try to understand it, just accept that it works
         const regex = new RegExp(
           `(?:https?:)?:?//` +
@@ -228,7 +229,7 @@ switch ($type):
         );
 
         // Replace plain links with anchors
-        dom.innerHTML = dom.innerHTML.replace(
+        dom.innerHTML = text.replace(
           regex,
           m => {
             // If the match starts with ://, prepend https
@@ -267,7 +268,7 @@ switch ($type):
             "mousedown",
             (e) => {
               touchTimer = setTimeout(() => {
-                if (e.target.contentEditable == "true") return;
+                if (editable.contentEditable == "true") return;
 
                 mdown = true;
               }, 500);
@@ -278,13 +279,13 @@ switch ($type):
           editable.addEventListener(
             "mouseup",
             (e) => {
-              if (mdown) {
+              if (mdown && editable.contentEditable != true) {
                 // Make the content editable and in plain format
-                e.target.contentEditable = true;
-                e.target.innerText = stagedTexts[idx];
+                editable.contentEditable = true;
+                editable.textContent = stagedTexts[idx];
 
                 // Focus on text
-                e.target.focus();
+                editable.focus();
 
                 // Reset flags
                 esc = false;
@@ -302,18 +303,32 @@ switch ($type):
             }
           );
 
+          // Prevent browser from adding <br> on Enter key
+          editable.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const selection = window.getSelection();
+              const range = selection.getRangeAt(0);
+              range.deleteContents();
+              range.insertNode(document.createTextNode("\n"));
+              range.collapse(false); // Move cursor after the newline
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+          });
+
           // Disable content editing and discard changes on escape key
           editable.addEventListener(
             "keyup",
             (e) => {
-              if (e.keyCode == 27) {
+              if (e.key == "Escape") {
                 esc = true;
 
-                e.target.contentEditable = false;
+                editable.contentEditable = false;
                 // Restore initial text
-                e.target.innerText = stagedTexts[idx];
+                editable.innerText = stagedTexts[idx];
                 // Highlight links
-                linkify(e.target);
+                linkify(editable, stagedTexts[idx]);
               }
             }
           );
@@ -322,18 +337,18 @@ switch ($type):
           editable.addEventListener(
             "blur",
             (e) => {
-              e.target.contentEditable = false;
+              editable.contentEditable = false;
 
               // Update text if something has changed
-              if (!esc && (e.target.innerText != stagedTexts[idx])) {
+              if (!esc && (editable.innerText != stagedTexts[idx])) {
                 // Update staged text with changes
-                stagedTexts[idx] = e.target.innerText;
+                stagedTexts[idx] = editable.innerText;
 
                 // Send request to the server
                 post(
                   "note",
                   {
-                    "text": stagedTexts[idx],
+                    "text": editable.innerText,
                     "node": e.target.nodeName
                   },
                   (result) => {
@@ -343,16 +358,44 @@ switch ($type):
               }
 
               // Highlight links
-              linkify(e.target);
+              linkify(editable, stagedTexts[idx]);
+            }
+          );
+
+          // insert clean, plain text on paste event
+          editable.addEventListener(
+            "paste",
+            (e) => {
+              e.preventDefault();
+
+              // Get text from the clipboard
+              const text = (
+                event.clipboardData || window.clipboardData
+              ).getData('text/plain');
+
+              // Get the current selection
+              const selection = window.getSelection();
+              if (!selection.rangeCount) return;
+
+              // Insert the text at the cursor
+              const range = selection.getRangeAt(0);
+
+              // Remove any selected content
+              range.deleteContents();
+              range.insertNode(document.createTextNode(text));
+
+              // Move cursor after the inserted text
+              range.setStartAfter(editable.lastChild);
+              range.setEndAfter(editable.lastChild);
+              selection.removeAllRanges();
+              selection.addRange(range);
             }
           );
 
           // Highlight links
-          linkify(editable);
+          linkify(editable, stagedTexts[idx]);
         });
-
       });
-
     </script>
   </head>
   <body>
@@ -363,7 +406,8 @@ switch ($type):
     <main class="editable">Long press to edit this note. Press outside text to save it.
 Press the Escape key to cancel the changes.
 
-Links like https://alexu.click open in a new tab</main>
+Links like https://alexu.click open in a new tab
+    </main>
     <footer>
     </footer>
     <dialog>
