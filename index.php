@@ -259,6 +259,25 @@ switch ($type):
         // A flag indicating the Escape key has been pressed
         let esc = false;
 
+        /**
+         * Makes the specified element's content editable
+         * 
+         * @param dom     Element that will become editable
+         * @param content Raw editable content
+         */
+        function makeEditable(dom, content) {
+          // Make the content editable and in plain format
+          dom.contentEditable = true;
+          dom.textContent = content;
+
+          // Focus on text
+          dom.focus();
+
+          // Reset flags
+          esc = false;
+          mdown = false;
+        }
+
         editables.forEach((editable, idx) => {
           // Store initial plain texts
           stagedTexts[idx] = editable.innerText;
@@ -275,21 +294,35 @@ switch ($type):
             }
           );
 
+          // Enable content editing on long press on touch screens
+          editable.addEventListener(
+            "touchstart",
+            (e) => {
+              touchTimer = setTimeout(() => {
+                console.log(editable.contentEditable);
+                if (editable.contentEditable == true) return;
+
+                e.preventDefault();
+                makeEditable(editable, stagedTexts[idx]);
+                return false;
+              }, 500);
+            }
+          );
+
+          // Cancel content editing if no long press
+          editable.addEventListener(
+            "touchend",
+            (e) => {
+              clearInterval(touchTimer);
+            }
+          );
+
           // Enable content editing on mouse release after long press
           editable.addEventListener(
             "mouseup",
             (e) => {
               if (mdown && editable.contentEditable != true) {
-                // Make the content editable and in plain format
-                editable.contentEditable = true;
-                editable.textContent = stagedTexts[idx];
-
-                // Focus on text
-                editable.focus();
-
-                // Reset flags
-                esc = false;
-                mdown = false;
+                makeEditable(editable, stagedTexts[idx]);
               }
             }
           );
