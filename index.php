@@ -282,57 +282,13 @@ switch ($type):
           // Store initial plain texts
           stagedTexts[idx] = editable.innerText;
 
-          // Enable content editing on long press
-          editable.addEventListener(
-            "mousedown",
-            (e) => {
-              touchTimer = setTimeout(() => {
-                if (editable.contentEditable == "true") return;
-
-                mdown = true;
-              }, 500);
-            }
-          );
-
-          // Enable content editing on long press on touch screens
-          editable.addEventListener(
-            "touchstart",
-            (e) => {
-              touchTimer = setTimeout(() => {
-                console.log(editable.contentEditable);
-                if (editable.contentEditable == true) return;
-
-                e.preventDefault();
-                makeEditable(editable, stagedTexts[idx]);
-                return false;
-              }, 500);
-            }
-          );
-
-          // Cancel content editing if no long press
-          editable.addEventListener(
-            "touchend",
-            (e) => {
-              clearInterval(touchTimer);
-            }
-          );
-
           // Enable content editing on mouse release after long press
           editable.addEventListener(
-            "mouseup",
+            "dblclick",
             (e) => {
-              if (mdown && editable.contentEditable != true) {
+              if (editable.contentEditable != true) {
                 makeEditable(editable, stagedTexts[idx]);
               }
-            }
-          );
-
-          // Discard content editing if selecting text
-          editable.addEventListener(
-            "mousemove",
-            (e) => {
-              clearInterval(touchTimer);
-              mdown = false;
             }
           );
 
