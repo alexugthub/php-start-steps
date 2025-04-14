@@ -254,8 +254,6 @@ switch ($type):
         let touchTimer;
         // A variable for temporarily storing texts
         let stagedTexts = [];
-        // A flag indicating the mouse down event is taking place
-        let mdown = false;
         // A flag indicating the Escape key has been pressed
         let esc = false;
 
@@ -270,12 +268,8 @@ switch ($type):
           dom.contentEditable = true;
           dom.textContent = content;
 
-          // Focus on text
-          dom.focus();
-
           // Reset flags
           esc = false;
-          mdown = false;
         }
 
         editables.forEach((editable, idx) => {
@@ -286,7 +280,7 @@ switch ($type):
           editable.addEventListener(
             "dblclick",
             (e) => {
-              if (editable.contentEditable != true) {
+              if (editable.contentEditable != "true") {
                 makeEditable(editable, stagedTexts[idx]);
               }
             }
@@ -300,7 +294,8 @@ switch ($type):
               const range = selection.getRangeAt(0);
               range.deleteContents();
               range.insertNode(document.createTextNode("\n"));
-              range.collapse(false); // Move cursor after the newline
+              // Move cursor after the newline
+              range.collapse(false);
               selection.removeAllRanges();
               selection.addRange(range);
             }
