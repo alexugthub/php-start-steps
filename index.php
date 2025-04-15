@@ -12,10 +12,17 @@
 //====================================================================
 
 // Application version
-define("VERSION", "0.1.0");
+define("VERSION",       "0.2.0");
 
 // Debug mode for local testing
-define("DEBUG",   true);
+define("DEBUG",         true);
+
+// Database connection information
+define("MYSQL_DB_HOST", "localhost");
+define("MYSQL_DB_PORT", 3306);
+define("MYSQL_DB_NAME", "u813379533_steps");
+define("MYSQL_DB_USER", "u813379533_admin");
+define("MYSQL_DB_PASS", "CdDKJ#4Zi");
 
 //====================================================================
 // REQUEST
@@ -51,6 +58,181 @@ $response     = [
   "success"   => false
 ];
 
+//====================================================================
+// FUNCTIONS
+//====================================================================
+
+/**
+ * Connects to the database and returns the data object
+ * 
+ * @param config Array with connection information
+ */
+function database($config = []) {
+  // If parameters not specified, use definitions
+  $host = $config["host"] ?? MYSQL_DB_HOST;
+  $port = $config["port"] ?? MYSQL_DB_PORT;
+  $name = $config["name"] ?? MYSQL_DB_NAME;
+  $user = $config["user"] ?? MYSQL_DB_USER;
+  $pass = $config["pass"] ?? MYSQL_DB_PASS;
+
+  // Give it a try
+  try {
+    // Create a new connection
+    $dbh = new PDO(
+      "mysql:host=$host;dbname=$name;port=$port", $user, $pass
+    );
+
+    // Return PDO
+    return $dbh;
+  } catch (PDOException $e) {
+    // Return nothing
+    return null;
+  }
+}
+
+/**
+ * Installs the application for the first time
+ */
+function install() {
+  // Connect to the database to create the initial tables
+  $dbh = database();
+  if ($dbh) {
+    // Create procedure that adds foreign keys if they don't exist
+    $dbh->exec(
+      <<<EOD
+        DROP PROCEDURE IF EXISTS AddForeignKeyIfNotExist;
+
+        CREATE PROCEDURE AddForeignKeyIfNotExist(
+            IN p_table_name VARCHAR(64),
+            IN p_column_name VARCHAR(64),
+            IN p_ref_table_name VARCHAR(64),
+            IN p_ref_column_name VARCHAR(64),
+            IN p_constraint_name VARCHAR(64)
+        )
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 
+                FROM information_schema.TABLE_CONSTRAINTS 
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = p_table_name
+                AND CONSTRAINT_NAME = p_constraint_name
+                AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+            ) THEN
+                SET @sql = CONCAT(
+                    'ALTER TABLE `', p_table_name, '` ',
+                    'ADD CONSTRAINT `', p_constraint_name, '` ',
+                    'FOREIGN KEY (`', p_column_name, '`) ',
+                    'REFERENCES `', p_ref_table_name, '` 
+                      (`', p_ref_column_name, '`) ',
+                    'ON DELETE CASCADE ON UPDATE CASCADE'
+                );
+                PREPARE stmt FROM @sql;
+                EXECUTE stmt;
+                DEALLOCATE PREPARE stmt;
+            END IF;
+        END;
+      EOD
+    );
+
+    // Create the contexts table, for holding different contexts
+    $dbh->exec(
+      <<<EOD
+        CREATE TABLE IF NOT EXISTS `contexts` (
+        `ID` INT UNSIGNED NOT NULL AUTO_INCREMENT
+          COMMENT 'Unique ID',
+        `active` BOOLEAN NOT NULL DEFAULT FALSE
+          COMMENT 'Currently used or not',
+        PRIMARY KEY (`ID`))
+        ENGINE = InnoDB
+        CHARSET = utf8mb4 COLLATE utf8mb4_unicode_ci
+        COMMENT = 'Switchable contexts';
+      EOD
+    );
+
+    // Create the nodes table, for the hierarchy of nodes
+    $dbh->exec(
+      <<<EOD
+        CREATE TABLE IF NOT EXISTS `nodes` (
+        `ID` INT UNSIGNED NOT NULL AUTO_INCREMENT
+          COMMENT 'Unique ID',
+        `contextID` INT UNSIGNED NOT NULL
+          COMMENT 'Context',
+        `parentID` INT UNSIGNED NULL DEFAULT NULL
+          COMMENT 'Parent node',
+        `type` ENUM('text', 'section', 'list', 'routine')
+          NOT NULL DEFAULT 'text'
+          COMMENT 'Node type',
+        `position` INT NOT NULL DEFAULT '0'
+          COMMENT 'Position on page',
+        PRIMARY KEY (`ID`))
+        ENGINE = InnoDB
+        CHARSET = utf8mb4 COLLATE utf8mb4_unicode_ci
+        COMMENT = 'Interrelated nodes';
+
+        CALL AddForeignKeyIfNotExist(
+          'nodes',
+          'contextID',
+          'contexts',
+          'ID', 
+          'nodes_ibfk_contextID'
+        );
+
+        CALL AddForeignKeyIfNotExist(
+          'nodes',
+          'parentID',
+          'nodes',
+          'ID', 
+          'nodes_ibfk_parentID'
+        );
+      EOD
+    );
+
+    // Create the texts table, for simple blocks of text
+    $dbh->exec(
+      <<<EOD
+        CREATE TABLE IF NOT EXISTS `texts` (
+        `ID` INT UNSIGNED NOT NULL AUTO_INCREMENT
+          COMMENT 'Unique ID',
+        `nodeID` INT UNSIGNED NOT NULL
+          COMMENT 'Assigned node',
+        `content` TEXT NULL DEFAULT NULL
+          COMMENT 'Full content',
+        `lang` VARCHAR(2) NOT NULL DEFAULT 'en'
+          COMMENT 'Language',
+        `version` INT NOT NULL DEFAULT 0
+          COMMENT 'Changes version',
+        PRIMARY KEY (`ID`))
+        ENGINE = InnoDB DEFAULT
+        CHARSET = utf8mb4 COLLATE=utf8mb4_unicode_ci
+        COMMENT = 'Text blocks';
+
+        CALL AddForeignKeyIfNotExist(
+          'texts',
+          'nodeID',
+          'nodes',
+          'ID', 
+          'texts_ibfk_nodeID'
+        );
+      EOD
+    );
+
+    // Read this same file
+    $code = file_get_contents(__FILE__);
+
+    // Remove installer invocation
+    $code = str_replace("install();\r\n", "// install();\r\n", $code);
+
+    // To test in debug mode, save somewhere else
+    $path = DEBUG ? "test.php" : "index.php";
+
+    // Save code with new configuration
+    file_put_contents($path, $code);
+  }
+}
+
+// Install (invocation is commented out once installed)
+install();
+
 // Handle request and generate response based on content type
 switch ($type):
 
@@ -80,7 +262,7 @@ switch ($type):
         $replace = PHP_EOL . $indent . '$1' . $text . $indent . '$3';
         $code = preg_replace($pattern, $replace, $code);
 
-        // To test debug mode, save somewhere else
+        // To test in debug mode, save somewhere else
         $path = DEBUG ? "test.php" : "index.php";
 
         // Save code with new configuration
