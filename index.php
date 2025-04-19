@@ -12,7 +12,7 @@
 //====================================================================
 
 // Application version
-define("VERSION",       "0.2.0");
+define("VERSION",       "0.2.1");
 
 // Debug mode for local testing
 define("DEBUG",         true);
@@ -224,6 +224,10 @@ function install() {
 
     // Remove installer invocation
     $code = str_replace("install();\r\n", "// install();\r\n", $code);
+    $code = str_replace(
+      "install();" . PHP_EOL,
+      "// install();" . PHP_EOL, $code
+    );
 
     // To test in debug mode, save somewhere else
     $path = DEBUG ? "test.php" : "index.php";
@@ -568,9 +572,10 @@ switch ($type):
           // Get content from server
           get("note", { "node": idx + 1 }, "json", (note) => {
             if (note.success) {
+              // Set note content, if it was received
+              editable.innerText = note.content;
               // Store initial plain texts from note
               stagedTexts[idx] = note.content;
-
               // Highlight links
               linkify(editable, stagedTexts[idx]);
             }
