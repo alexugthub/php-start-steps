@@ -146,6 +146,9 @@ function install() {
         ENGINE = InnoDB
         CHARSET = utf8mb4 COLLATE utf8mb4_unicode_ci
         COMMENT = 'Switchable contexts';
+
+        INSERT IGNORE INTO `contexts` (`ID`, `active`)
+        VALUES ('1', '1');
       EOD
     );
 
@@ -246,31 +249,46 @@ switch ($type):
     switch ("$method:$operation") {
       // Update text of note
       case "post:note":
-        // Read this same file
-        $code = file_get_contents(__FILE__);
+        // Try connecting to the database to save the note
+        $dbh = database();
 
-        // Get node name to be replaced
-        $node = strtolower($request["node"]);
+        // Validate request data
+        if (!is_numeric($request["node"]) || $request["node"] < 1) {
+          $response["message"] = "Invalid node";
+          break;
+        }
 
-        // Convert special characters to HTML entities
-        $text = htmlspecialchars($request["text"], ENT_QUOTES);
+        if (!isset($request["text"]) || empty($request["text"])) {
+          $response["message"] = "No content specified";
+          break;
+        }
 
-        // Replace content of main element in this file
-        $indent = "    ";
-        $pattern = '/\s+(<' . $node . '[\s\S]*?>)\n?([\s\S]*?)' .
-          '(<\/' . $node . '>)/i';
-        $replace = PHP_EOL . $indent . '$1' . $text . $indent . '$3';
-        $code = preg_replace($pattern, $replace, $code);
+        if ($dbh && $request["node"] > 0) {
+          // Create a new node for the node
+          $stmt = $dbh->prepare(
+            "INSERT IGNORE INTO `nodes` " .
+            "(`ID`, `contextID`, `parentID`, `type`, `position`) " .
+            "VALUES (:node, 1, NULL, 'text', 0)"
+          );
 
-        // To test in debug mode, save somewhere else
-        $path = DEBUG ? "test.php" : "index.php";
+          $stmt->bindParam(':node', $request["node"]);
+          $stmt->execute();
 
-        // Save code with new configuration
-        file_put_contents($path, $code);
+          // Save the note in the texts table
+          $stmt = $dbh->prepare(
+            "INSERT INTO `texts` " .
+            "(`nodeID`, `content`, `lang`, `version`) " .
+            "SELECT :node, :content, 'en', ".
+            "COALESCE(MAX(version) + 1, 0) FROM `texts` " .
+            "WHERE nodeID = :node"
+          );
 
-        $response["success"] = true;
+          $stmt->bindParam(':node', $request["node"]);
+          $stmt->bindParam(':content', $request["text"]);
+          $stmt->execute();
 
-        break;
+          $response["success"] = true;
+        }
     }
 
     // Return response as JSON
@@ -515,7 +533,7 @@ switch ($type):
                   "note",
                   {
                     "text": editable.innerText,
-                    "node": e.target.nodeName
+                    "node": idx + 1
                   },
                   (result) => {
                     if (!result.success) alert("Failed to save text");
