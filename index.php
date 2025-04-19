@@ -276,11 +276,9 @@ switch ($type):
 
           // Save the note in the texts table
           $stmt = $dbh->prepare(
-            "INSERT INTO `texts` " .
-            "(`nodeID`, `content`, `lang`, `version`) " .
-            "SELECT :node, :content, 'en', ".
-            "COALESCE(MAX(version) + 1, 0) FROM `texts` " .
-            "WHERE nodeID = :node"
+            "REPLACE INTO `texts` " .
+            "(`ID`, `nodeID`, `content`, `lang`, `version`) " .
+            "VALUES (:node, :node, :content, 'en', 0)"
           );
 
           $stmt->bindParam(':node', $request["node"]);
