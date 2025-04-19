@@ -247,11 +247,36 @@ switch ($type):
   case "application/json":
     // Handle each method and requested operation
     switch ("$method:$operation") {
-      // Update text of note
-      case "post:note":
+      // Get a note by its ID
+      case "get:note":
+        // Validate request data
+        if (!is_numeric($request["node"]) || $request["node"] < 1) {
+          $response["message"] = "Invalid node ID";
+          break;
+        }
+
         // Try connecting to the database to save the note
         $dbh = database();
 
+        if ($dbh) {
+          // Retrieve note from the texts table
+          $stmt = $dbh->prepare(
+            "SELECT content FROM `texts` WHERE nodeID = :node LIMIT 1"
+          );
+          $stmt->bindParam(':node', $request["node"]);
+          $stmt->execute();
+
+          // Get the note's content for the response
+          $note = $stmt->fetch(PDO::FETCH_ASSOC);
+          if ($note) {
+            $response["content"] = $note["content"];
+            $response["success"] = true;
+          }
+        }
+
+        break;
+      // Update text of note
+      case "post:note":
         // Validate request data
         if (!is_numeric($request["node"]) || $request["node"] < 1) {
           $response["message"] = "Invalid node";
@@ -263,7 +288,10 @@ switch ($type):
           break;
         }
 
-        if ($dbh && $request["node"] > 0) {
+        // Try connecting to the database to save the note
+        $dbh = database();
+
+        if ($dbh) {
           // Create a new node for the node
           $stmt = $dbh->prepare(
             "INSERT IGNORE INTO `nodes` " .
@@ -537,8 +565,16 @@ switch ($type):
         }
 
         editables.forEach((editable, idx) => {
-          // Store initial plain texts
-          stagedTexts[idx] = editable.innerText;
+          // Get content from server
+          get("note", { "node": idx + 1 }, "json", (note) => {
+            if (note.success) {
+              // Store initial plain texts from note
+              stagedTexts[idx] = note.content;
+
+              // Highlight links
+              linkify(editable, stagedTexts[idx]);
+            }
+          });
 
           // Enable content editing on mouse release after long press
           editable.addEventListener(
@@ -639,9 +675,6 @@ switch ($type):
               selection.addRange(range);
             }
           );
-
-          // Highlight links
-          linkify(editable, stagedTexts[idx]);
         });
       });
     </script>
