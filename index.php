@@ -373,6 +373,18 @@ switch ($type):
     </style>
     <script>
       //==============================================================
+      // CONSTANTS
+      //==============================================================
+
+      // Requests types
+      const requestTypes = {
+        "json"           : "application/json",
+        "html"           : "text/html",
+        "css"            : "text/css",
+        "js"             : "text/javascript"
+      };
+
+      //==============================================================
       // HELPERS
       //==============================================================
 
@@ -380,6 +392,60 @@ switch ($type):
        * Shortcut for getting an element by selector
        */
       const esel = (sel) => document.querySelector(sel);
+
+      /**
+       * Shortcut for sending GET requests with parameters
+       * 
+       * @param operation Requested operation
+       * @param data      Additional request data
+       * @param type      Request type (JSON, HTML, CSS, JS)
+       * @param cb        Callback function on finish
+       */
+      const get = (operation, data, type, cb) => {
+        // Validate the type of requested content
+        if (!requestTypes.hasOwnProperty(type)) {
+          console.error("Invalid request type");
+          return;
+        }
+
+        // Parameters that go with the request, built from the data
+        let params = Object.keys(data).map(
+          (key, i) => {
+            return [key, encodeURI(data[key])].join("=");
+          }
+        ).join("&");
+
+        if (params) params = "?" + params;
+
+        // Send asynchronous requests
+        (async () => {
+            const response = await fetch(
+              params,
+              {
+                method: "GET",
+                headers: {
+                  "Operation": operation,
+                  "Accept": requestTypes[type]
+                }
+              }
+            );
+
+            // Wait for the response and return requested type
+            switch(type) {
+              case "json":
+                // Invoke callback with result as JSON
+                cb(await response.json());
+                break;
+              default:
+                // Invoke callback with result as DOM template 
+                const template = document.createElement("template");
+                const result = await response.text();
+                template.innerHTML = result.trim();
+                cb(template.content);
+            }
+          }
+        )();
+      }
 
       /**
        * Shortcut for sending POST requests with parameters
@@ -585,10 +651,7 @@ switch ($type):
       <h1 class="editable"><?= $title ?></h1>
       <p class="editable"><?= $description ?></p>
     </header>
-    <main class="editable">Long press to edit this note. Press outside text to save it.
-Press the Escape key to cancel the changes.
-
-Links like https://alexu.click open in a new tab
+    <main class="editable">
     </main>
     <footer>
     </footer>
