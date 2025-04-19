@@ -251,36 +251,11 @@ switch ($type):
   case "application/json":
     // Handle each method and requested operation
     switch ("$method:$operation") {
-      // Get a note by its ID
-      case "get:note":
-        // Validate request data
-        if (!is_numeric($request["node"]) || $request["node"] < 1) {
-          $response["message"] = "Invalid node ID";
-          break;
-        }
-
+      // Update text of note
+      case "post:note":
         // Try connecting to the database to save the note
         $dbh = database();
 
-        if ($dbh) {
-          // Retrieve note from the texts table
-          $stmt = $dbh->prepare(
-            "SELECT content FROM `texts` WHERE nodeID = :node LIMIT 1"
-          );
-          $stmt->bindParam(':node', $request["node"]);
-          $stmt->execute();
-
-          // Get the note's content for the response
-          $note = $stmt->fetch(PDO::FETCH_ASSOC);
-          if ($note) {
-            $response["content"] = $note["content"];
-            $response["success"] = true;
-          }
-        }
-
-        break;
-      // Update text of note
-      case "post:note":
         // Validate request data
         if (!is_numeric($request["node"]) || $request["node"] < 1) {
           $response["message"] = "Invalid node";
@@ -292,10 +267,7 @@ switch ($type):
           break;
         }
 
-        // Try connecting to the database to save the note
-        $dbh = database();
-
-        if ($dbh) {
+        if ($dbh && $request["node"] > 0) {
           // Create a new node for the node
           $stmt = $dbh->prepare(
             "INSERT IGNORE INTO `nodes` " .
@@ -308,9 +280,11 @@ switch ($type):
 
           // Save the note in the texts table
           $stmt = $dbh->prepare(
-            "REPLACE INTO `texts` " .
-            "(`ID`, `nodeID`, `content`, `lang`, `version`) " .
-            "VALUES (:node, :node, :content, 'en', 0)"
+            "INSERT INTO `texts` " .
+            "(`nodeID`, `content`, `lang`, `version`) " .
+            "SELECT :node, :content, 'en', ".
+            "COALESCE(MAX(version) + 1, 0) FROM `texts` " .
+            "WHERE nodeID = :node"
           );
 
           $stmt->bindParam(':node', $request["node"]);
@@ -405,18 +379,6 @@ switch ($type):
     </style>
     <script>
       //==============================================================
-      // CONSTANTS
-      //==============================================================
-
-      // Requests types
-      const requestTypes = {
-        "json"           : "application/json",
-        "html"           : "text/html",
-        "css"            : "text/css",
-        "js"             : "text/javascript"
-      };
-
-      //==============================================================
       // HELPERS
       //==============================================================
 
@@ -424,60 +386,6 @@ switch ($type):
        * Shortcut for getting an element by selector
        */
       const esel = (sel) => document.querySelector(sel);
-
-      /**
-       * Shortcut for sending GET requests with parameters
-       * 
-       * @param operation Requested operation
-       * @param data      Additional request data
-       * @param type      Request type (JSON, HTML, CSS, JS)
-       * @param cb        Callback function on finish
-       */
-      const get = (operation, data, type, cb) => {
-        // Validate the type of requested content
-        if (!requestTypes.hasOwnProperty(type)) {
-          console.error("Invalid request type");
-          return;
-        }
-
-        // Parameters that go with the request, built from the data
-        let params = Object.keys(data).map(
-          (key, i) => {
-            return [key, encodeURI(data[key])].join("=");
-          }
-        ).join("&");
-
-        if (params) params = "?" + params;
-
-        // Send asynchronous requests
-        (async () => {
-            const response = await fetch(
-              params,
-              {
-                method: "GET",
-                headers: {
-                  "Operation": operation,
-                  "Accept": requestTypes[type]
-                }
-              }
-            );
-
-            // Wait for the response and return requested type
-            switch(type) {
-              case "json":
-                // Invoke callback with result as JSON
-                cb(await response.json());
-                break;
-              default:
-                // Invoke callback with result as DOM template 
-                const template = document.createElement("template");
-                const result = await response.text();
-                template.innerHTML = result.trim();
-                cb(template.content);
-            }
-          }
-        )();
-      }
 
       /**
        * Shortcut for sending POST requests with parameters
@@ -576,11 +484,8 @@ switch ($type):
               editable.innerText = note.content;
               // Store initial plain texts from note
               stagedTexts[idx] = note.content;
-              // Highlight links
-              linkify(editable, stagedTexts[idx]);
-            }
-          });
-
+          // Store initial plain texts
+          stagedTexts[idx] = editable.innerText;
           // Enable content editing on mouse release after long press
           editable.addEventListener(
             "dblclick",
@@ -680,6 +585,9 @@ switch ($type):
               selection.addRange(range);
             }
           );
+
+          // Highlight links
+          linkify(editable, stagedTexts[idx]);
         });
       });
     </script>
